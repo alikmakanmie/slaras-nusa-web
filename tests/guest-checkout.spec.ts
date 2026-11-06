@@ -49,7 +49,7 @@ async function orderNumberFromModal(page: Page): Promise<string> {
 /** Tambah N produk pertama yang masih ada stoknya dari katalog ke keranjang. */
 async function addProducts(page: Page, count: number) {
   await page.goto('/')
-  await expect(page.locator('text=Nasi Goreng Slaras').first()).toBeVisible()
+  await expect(page.locator('#katalog article').first()).toBeVisible({ timeout: 15_000 })
   // Hanya tombol yang aktif (produk habis stok ber-tombol disabled).
   const addButtons = page.locator('button[title="Tambah ke keranjang"]:not([disabled])')
   for (let i = 0; i < count; i++) {

@@ -67,7 +67,7 @@ async function simulatePayment(page: Page, request: APIRequestContext, orderNumb
 /** Tambah N produk pertama yang masih ada stoknya dari katalog ke keranjang. */
 async function addProducts(page: Page, count: number) {
   await page.goto('/')
-  await expect(page.locator('text=Nasi Goreng Slaras').first()).toBeVisible()
+  await expect(page.locator('#katalog article').first()).toBeVisible({ timeout: 15_000 })
   const addButtons = page.locator('button[title="Tambah ke keranjang"]:not([disabled])')
   for (let i = 0; i < count; i++) {
     const btn = addButtons.nth(i)
@@ -79,7 +79,7 @@ async function addProducts(page: Page, count: number) {
 /** Tambah SATU produk tertentu (indeks ke-n di antara tombol yang aktif). */
 async function addProductAt(page: Page, index: number) {
   await page.goto('/')
-  await expect(page.locator('text=Nasi Goreng Slaras').first()).toBeVisible()
+  await expect(page.locator('#katalog article').first()).toBeVisible({ timeout: 15_000 })
   const btn = page.locator('button[title="Tambah ke keranjang"]:not([disabled])').nth(index)
   await btn.evaluate((el) => el.scrollIntoView({ block: 'center' }))
   await btn.click()

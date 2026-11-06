@@ -15,6 +15,10 @@ export default function Home() {
   const [totalPages, setTotalPages] = useState(1)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  // ID kategori yang punya >= 1 produk aktif (dihitung dari katalog penuh,
+  // bukan halaman yang sedang tampil). Dipakai menyembunyikan chip kategori
+  // kosong — mis. kategori lama yang produknya sudah nonaktif semua.
+  const [activeCategoryIds, setActiveCategoryIds] = useState<Set<string> | null>(null)
 
   const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
@@ -30,6 +34,10 @@ export default function Home() {
       .listCategories()
       .then(setCategories)
       .catch(() => setCategories([]))
+    catalogApi
+      .listProducts({ limit: 100 })
+      .then((res) => setActiveCategoryIds(new Set(res.products.map((p) => p.category_id))))
+      .catch(() => setActiveCategoryIds(new Set()))
   }, [])
 
   // Debounce pencarian real-time 400ms
@@ -71,6 +79,13 @@ export default function Home() {
   const activeCategory = useMemo(
     () => categories.find((c) => c.id === categoryId),
     [categories, categoryId],
+  )
+
+  // Selama hitungan produk belum termuat, tampilkan semua chip (hindari kedip);
+  // setelah termuat, chip kategori tanpa produk aktif disembunyikan.
+  const visibleCategories = useMemo(
+    () => (activeCategoryIds === null ? categories : categories.filter((c) => activeCategoryIds.has(c.id))),
+    [categories, activeCategoryIds],
   )
 
   const applyPriceFilter = () => {
@@ -182,7 +197,7 @@ export default function Home() {
             >
               Semua
             </button>
-            {categories.map((c) => (
+            {visibleCategories.map((c) => (
               <button
                 key={c.id}
                 onClick={() => {

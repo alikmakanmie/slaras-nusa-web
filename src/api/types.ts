@@ -189,6 +189,8 @@ export interface Order {
   total: number
   payment_method: string
   notes: string
+  /** Nama staf admin/superadmin yang terakhir mengubah status order (audit trail). Kosong bila belum pernah diproses staf. */
+  processed_by_name?: string
   items: OrderItem[]
   payment?: PaymentInfo | null
   created_at: string
@@ -294,6 +296,8 @@ export interface RecentTransaction {
   table_number?: string
   status: OrderStatus
   total: number
+  /** Nama staf admin/superadmin yang terakhir mengubah status order (audit trail). */
+  processed_by_name?: string
   created_at: string
 }
 

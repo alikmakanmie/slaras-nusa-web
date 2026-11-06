@@ -8,6 +8,7 @@ import type { Category, CategoryInput, Order, OrderStatus, Product, ProductInput
 import { formatDate, formatRupiah } from '../utils/format'
 import { Modal, Spinner } from '../components/ProtectedRoute'
 import { NEXT_STATUS, StatusBadge } from '../components/StatusBadge'
+import ProductImage from '../components/ProductImage'
 import ProfitDashboard from './ProfitDashboard'
 import UserManagement from './UserManagement'
 
@@ -283,6 +284,9 @@ export default function Admin() {
           <div className="mt-4 flex flex-col gap-3">
             {products.map((p) => (
               <article key={p.id} className="card flex flex-wrap items-center gap-3 p-4">
+                <div className="h-16 w-16 shrink-0 overflow-hidden border-2 border-black dark:border-white">
+                  <ProductImage src={p.image_url} name={p.name} />
+                </div>
                 <div className="min-w-0 flex-1">
                   <p className="font-display text-base font-black uppercase">{p.name}</p>
                   <p className="text-sm text-zinc-600 dark:text-zinc-400">
@@ -357,6 +361,11 @@ export default function Admin() {
                     {formatDate(o.created_at)} • {o.shipping_name} • {o.payment_method.toUpperCase()} •{' '}
                     {o.items.length} item
                   </p>
+                  {o.processed_by_name && (
+                    <p className="mt-1 text-xs font-bold text-zinc-500 dark:text-zinc-400">
+                      Diproses oleh: {o.processed_by_name}
+                    </p>
+                  )}
                 </div>
                 <StatusBadge status={o.status} />
               </div>

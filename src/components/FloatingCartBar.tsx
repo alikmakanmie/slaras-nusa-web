@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { ArrowRight, Minus, Plus, ShoppingCart, Trash2, X } from 'lucide-react'
 import { useCart } from '../context/CartContext'
 import { formatRupiah } from '../utils/format'
+import ProductImage from './ProductImage'
 
 /**
  * Floating Cart Card (sticky checkout bar) — muncul persisten di bawah layar
@@ -111,13 +112,23 @@ export default function FloatingCartBar() {
                   className="card flex flex-col gap-2 p-3"
                   data-testid="drawer-item"
                 >
-                  <p className="font-display text-sm font-black uppercase leading-tight">
-                    {item.product?.name ?? 'Produk'}
-                  </p>
-                  <p className="text-xs text-zinc-600 dark:text-zinc-400">
-                    {formatRupiah(item.price)} / item
-                    {item.notes ? ` • Catatan: ${item.notes}` : ''}
-                  </p>
+                  <div className="flex gap-3">
+                    <div className="h-16 w-16 shrink-0 overflow-hidden border-2 border-black dark:border-white">
+                      <ProductImage
+                        src={item.product?.image_url ?? ''}
+                        name={item.product?.name ?? 'Produk'}
+                      />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-display text-sm font-black uppercase leading-tight">
+                        {item.product?.name ?? 'Produk'}
+                      </p>
+                      <p className="text-xs text-zinc-600 dark:text-zinc-400">
+                        {formatRupiah(item.price)} / item
+                        {item.notes ? ` • Catatan: ${item.notes}` : ''}
+                      </p>
+                    </div>
+                  </div>
                   <div className="flex items-center gap-3">
                     <div className="flex items-center border-2 border-black dark:border-white">
                       <button

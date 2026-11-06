@@ -401,7 +401,14 @@ export default function ProfitDashboard() {
                         className="border-b border-zinc-200 dark:border-zinc-800"
                       >
                         <td className="py-2 pr-2 font-display text-xs font-black">{t.order_number}</td>
-                        <td className="py-2 pr-2 font-bold">{t.customer_name}</td>
+                        <td className="py-2 pr-2 font-bold">
+                          {t.customer_name}
+                          {t.processed_by_name && (
+                            <span className="block text-xs font-semibold text-zinc-500">
+                              Diproses oleh: {t.processed_by_name}
+                            </span>
+                          )}
+                        </td>
                         <td className="py-2 pr-2">
                           {orderTypeLabel(t.order_type)}
                           {t.table_number ? ` • ${t.table_number}` : ''}
