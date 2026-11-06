@@ -20,10 +20,46 @@ export interface User {
   name: string
   email: string
   phone: string
-  role: 'admin' | 'customer'
+  role: 'admin' | 'customer' | 'superadmin'
   is_active: boolean
   created_at: string
   updated_at: string
+}
+
+export type UserRole = 'customer' | 'admin' | 'superadmin'
+
+/** GET /superadmin/users/stats */
+export interface UserStats {
+  total: number
+  admin: number
+  superadmin: number
+  customer: number
+  inactive: number
+  active: number
+}
+
+export interface UserListMeta {
+  page: number
+  per_page: number
+  total: number
+  total_pages: number
+}
+
+export interface UserListFilters {
+  page?: number
+  per_page?: number
+  search?: string
+  role?: UserRole | ''
+  is_active?: boolean
+}
+
+/** POST /superadmin/users */
+export interface CreateUserInput {
+  name: string
+  email: string
+  password: string
+  phone?: string
+  role: UserRole
 }
 
 export interface Category {

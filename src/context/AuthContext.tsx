@@ -7,6 +7,7 @@ interface AuthCtx {
   user: User | null
   loading: boolean
   isAdmin: boolean
+  isSuperAdmin: boolean
   login: (email: string, password: string) => Promise<void>
   register: (name: string, email: string, password: string, phone?: string) => Promise<void>
   logout: () => Promise<void>
@@ -17,6 +18,7 @@ const Ctx = createContext<AuthCtx>({
   user: null,
   loading: true,
   isAdmin: false,
+  isSuperAdmin: false,
   login: async () => {},
   register: async () => {},
   logout: async () => {},
@@ -94,7 +96,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         user,
         loading,
-        isAdmin: user?.role === 'admin',
+        // Admin toko DAN superadmin boleh masuk /admin (operasional toko).
+        isAdmin: user?.role === 'admin' || user?.role === 'superadmin',
+        isSuperAdmin: user?.role === 'superadmin',
         login,
         register,
         logout,

@@ -3,13 +3,15 @@ import { Link } from 'react-router-dom'
 import { Pencil, Plus, Trash2 } from 'lucide-react'
 import { catalogApi, orderApi } from '../api/endpoints'
 import { apiErrorMessage } from '../api/client'
+import { useAuth } from '../context/AuthContext'
 import type { Category, CategoryInput, Order, OrderStatus, Product, ProductInput } from '../api/types'
 import { formatDate, formatRupiah } from '../utils/format'
 import { Modal, Spinner } from '../components/ProtectedRoute'
 import { NEXT_STATUS, StatusBadge } from '../components/StatusBadge'
 import ProfitDashboard from './ProfitDashboard'
+import UserManagement from './UserManagement'
 
-type Tab = 'profit' | 'products' | 'categories' | 'orders'
+type Tab = 'profit' | 'products' | 'categories' | 'orders' | 'users'
 
 const EMPTY_PRODUCT: ProductInput = {
   category_id: '',
@@ -35,6 +37,7 @@ function slugify(text: string): string {
 }
 
 export default function Admin() {
+  const { user, isSuperAdmin } = useAuth()
   const [tab, setTab] = useState<Tab>('profit')
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -220,9 +223,21 @@ export default function Admin() {
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8">
-      <h1 className="title">Admin Panel</h1>
+      <div className="flex flex-wrap items-center gap-3">
+        <h1 className="title">Admin Panel</h1>
+        {isSuperAdmin ? (
+          <span className="border-2 border-black bg-black px-2 py-1 font-display text-sm font-black uppercase text-yolk shadow-[4px_4px_0px_0px_#000] dark:border-white">
+            [ SUPERADMIN ]
+          </span>
+        ) : (
+          <span className="border-2 border-black bg-yolk px-2 py-1 font-display text-sm font-black uppercase text-black shadow-[4px_4px_0px_0px_#000] dark:border-white">
+            [ STORE ADMIN ]
+          </span>
+        )}
+      </div>
       <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
         Kelola produk, kategori, dan pesanan SLARAS NUSA FOODLAB.
+        {user && <> Masuk sebagai <span className="font-bold">{user.name}</span> ({user.email}).</>}
       </p>
 
       {error && (
@@ -249,9 +264,16 @@ export default function Admin() {
         <button className={tabCls('orders')} onClick={() => setTab('orders')}>
           Pesanan ({orders.length})
         </button>
+        {isSuperAdmin && (
+          <button className={tabCls('users')} onClick={() => setTab('users')}>
+            Manajemen User &amp; Akses
+          </button>
+        )}
       </div>
 
       {tab === 'profit' && <ProfitDashboard />}
+
+      {tab === 'users' && isSuperAdmin && <UserManagement />}
 
       {tab === 'products' && (
         <section className="mt-6">

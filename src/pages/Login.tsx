@@ -27,6 +27,22 @@ export default function Login() {
     }
   }
 
+  /** Isi kredensial demo lalu login langsung (untuk pengujian cepat). */
+  const demoLogin = async (demoEmail: string, demoPassword: string) => {
+    setEmail(demoEmail)
+    setPassword(demoPassword)
+    setError('')
+    setBusy(true)
+    try {
+      await login(demoEmail, demoPassword)
+      navigate(from, { replace: true })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Login gagal')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <div className="mx-auto max-w-md px-4 py-12">
       <div className="card p-6">
@@ -79,6 +95,25 @@ export default function Login() {
           <p className="font-display font-black uppercase">Akun demo</p>
           <p className="mt-1">Customer: customer@ecommerce.local / Customer123!</p>
           <p>Admin: admin@ecommerce.local / Admin123!</p>
+          <p>Superadmin: superadmin@slaras.local / SuperAdmin123!</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => demoLogin('superadmin@slaras.local', 'SuperAdmin123!')}
+              className="btn btn-primary btn-sm"
+            >
+              Demo Login Superadmin
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => demoLogin('admin@ecommerce.local', 'Admin123!')}
+              className="btn btn-accent btn-sm"
+            >
+              Demo Login Admin Toko
+            </button>
+          </div>
         </div>
       </div>
     </div>

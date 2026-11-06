@@ -8,6 +8,7 @@ import type {
   CartItem,
   Category,
   CategoryInput,
+  CreateUserInput,
   GuestCheckoutInput,
   Order,
   OrderStatus,
@@ -16,6 +17,10 @@ import type {
   ProfitAnalytics,
   ProfitPeriod,
   User,
+  UserListFilters,
+  UserListMeta,
+  UserRole,
+  UserStats,
 } from './types'
 
 export interface ProductFilters {
@@ -193,5 +198,42 @@ export const analyticsApi = {
       params: { period },
     })
     return res.data.data as ProfitAnalytics
+  },
+}
+
+// ---------- Manajemen User (superadmin saja; admin biasa -> 403) ----------
+export const superadminApi = {
+  async listUsers(filters: UserListFilters = {}): Promise<{ users: User[]; meta: UserListMeta }> {
+    const params: Record<string, string | number | boolean> = {
+      page: filters.page ?? 1,
+      per_page: filters.per_page ?? 10,
+    }
+    if (filters.search) params.search = filters.search
+    if (filters.role) params.role = filters.role
+    if (filters.is_active !== undefined) params.is_active = filters.is_active
+    const res = await api.get<ApiResponse<User[]>>('/superadmin/users', { params })
+    return {
+      users: res.data.data ?? [],
+      meta: (res.data.meta ?? { page: 1, per_page: 10, total: 0, total_pages: 1 }) as unknown as UserListMeta,
+    }
+  },
+  async getStats(): Promise<UserStats> {
+    const res = await api.get<ApiResponse<UserStats>>('/superadmin/users/stats')
+    return res.data.data as UserStats
+  },
+  async createUser(input: CreateUserInput): Promise<User> {
+    const res = await api.post<ApiResponse<User>>('/superadmin/users', input)
+    return res.data.data as User
+  },
+  async updateRole(id: string, role: UserRole): Promise<User> {
+    const res = await api.put<ApiResponse<User>>(`/superadmin/users/${id}/role`, { role })
+    return res.data.data as User
+  },
+  async updateStatus(id: string, isActive: boolean): Promise<User> {
+    const res = await api.put<ApiResponse<User>>(`/superadmin/users/${id}/status`, { is_active: isActive })
+    return res.data.data as User
+  },
+  async deleteUser(id: string): Promise<void> {
+    await api.delete(`/superadmin/users/${id}`)
   },
 }
