@@ -4,9 +4,11 @@ import { AuthProvider } from './context/AuthContext'
 import { CartProvider, useCart } from './context/CartContext'
 import { ThemeProvider } from './context/ThemeContext'
 import Navbar from './components/Navbar'
+import TableBanner from './components/TableBanner'
 import FloatingCartBar from './components/FloatingCartBar'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import Home from './pages/Home'
+import Queue from './pages/Queue'
 import ProductDetail from './pages/ProductDetail'
 import Login from './pages/Login'
 import Register from './pages/Register'
@@ -41,6 +43,9 @@ function Footer() {
           </Link>
           <Link to="/my-orders" className="hover:underline">
             Pesanan Saya
+          </Link>
+          <Link to="/queue" className="hover:underline">
+            Layar Antrean
           </Link>
           <Link to="/orders" className="hover:underline">
             Pesanan
@@ -88,9 +93,11 @@ function AppShell() {
   return (
     <div className="flex min-h-screen flex-col bg-bone text-black dark:bg-carbon dark:text-white">
       <Navbar />
+      <TableBanner />
       <main className={`flex-1 ${hasItems ? 'pb-28' : ''}`}>
         <Routes>
                   <Route path="/" element={<Home />} />
+                  <Route path="/queue" element={<Queue />} />
                   <Route path="/products/:id" element={<ProductDetail />} />
                   <Route path="/login" element={<Login />} />
                   <Route path="/register" element={<Register />} />

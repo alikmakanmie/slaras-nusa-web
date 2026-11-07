@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, Search, SlidersHorizontal } from 'lucide-react'
 import { catalogApi } from '../api/endpoints'
 import { apiErrorMessage } from '../api/client'
@@ -7,8 +7,11 @@ import type { Category, Product } from '../api/types'
 import ProductCard from '../components/ProductCard'
 import { Spinner } from '../components/ProtectedRoute'
 import { CategoryIcon } from '../components/ProductVisual'
+import { saveTable, tableFromSearch } from '../utils/table'
+import { notifyTableChanged } from '../components/TableBanner'
 
 export default function Home() {
+  const [searchParams] = useSearchParams()
   const [categories, setCategories] = useState<Category[]>([])
   const [products, setProducts] = useState<Product[]>([])
   const [total, setTotal] = useState(0)
@@ -28,6 +31,15 @@ export default function Home() {
   const [minPrice, setMinPrice] = useState<number | undefined>(undefined)
   const [maxPrice, setMaxPrice] = useState<number | undefined>(undefined)
   const [page, setPage] = useState(1)
+
+  // Auto-detect QR meja: ?table=XX / ?meja=XX -> simpan & tampilkan banner.
+  useEffect(() => {
+    const table = tableFromSearch(searchParams.toString())
+    if (table) {
+      saveTable(table)
+      notifyTableChanged()
+    }
+  }, [searchParams])
 
   useEffect(() => {
     catalogApi

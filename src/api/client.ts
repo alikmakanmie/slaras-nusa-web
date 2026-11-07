@@ -27,6 +27,29 @@ export const api = axios.create({
   timeout: 20000,
 })
 
+/** Upload gambar produk ke POST /upload (admin). Mengembalikan URL publik. */
+export async function uploadImage(file: File): Promise<string> {
+  const form = new FormData()
+  form.append('file', file)
+  // Jangan set Content-Type manual: axios/browser mengisi
+  // multipart/form-data + boundary otomatis.
+  const res = await axios.post<ApiResponse<{ url: string }>>(
+    `${API_URL}/upload`,
+    form,
+    {
+      headers: {
+        Authorization: tokenStore.getAccess()
+          ? `Bearer ${tokenStore.getAccess()}`
+          : '',
+      },
+      timeout: 60000,
+    },
+  )
+  const url = res.data.data?.url
+  if (!url) throw new Error('upload gagal: server tidak mengembalikan URL')
+  return url
+}
+
 api.interceptors.request.use((config) => {
   const token = tokenStore.getAccess()
   if (token) config.headers.Authorization = `Bearer ${token}`

@@ -51,6 +51,9 @@ export default function Navbar() {
           <Link to="/my-orders" className={linkCls('/my-orders')}>
             Pesanan Saya
           </Link>
+          <Link to="/queue" className={linkCls('/queue')}>
+            Layar Antrean
+          </Link>
           {user && (
             <Link to="/orders" className={linkCls('/orders')}>
               Pesanan

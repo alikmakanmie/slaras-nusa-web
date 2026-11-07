@@ -3,7 +3,10 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { ArrowRight, Minus, Plus, ShoppingCart, Trash2, X } from 'lucide-react'
 import { useCart } from '../context/CartContext'
 import { formatRupiah } from '../utils/format'
+import { modifiersSummary } from '../utils/modifiers'
 import ProductImage from './ProductImage'
+import VoucherBox, { loadVoucherCode } from './VoucherBox'
+import type { VoucherValidation } from '../api/types'
 
 /**
  * Floating Cart Card (sticky checkout bar) — muncul persisten di bawah layar
@@ -16,6 +19,7 @@ export default function FloatingCartBar() {
   const location = useLocation()
   const navigate = useNavigate()
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [drawerVoucher, setDrawerVoucher] = useState<VoucherValidation | null>(null)
 
   const items = cart?.cart.items ?? []
   const totalItems = cart?.total_items ?? 0
@@ -125,7 +129,10 @@ export default function FloatingCartBar() {
                       </p>
                       <p className="text-xs text-zinc-600 dark:text-zinc-400">
                         {formatRupiah(item.price)} / item
-                        {item.notes ? ` • Catatan: ${item.notes}` : ''}
+                        {item.selected_modifiers && item.selected_modifiers.length > 0
+                          ? ` • ${modifiersSummary(item.selected_modifiers)}`
+                          : ''}
+                        {item.notes && item.selected_modifiers?.length === 0 ? ` • Catatan: ${item.notes}` : ''}
                       </p>
                     </div>
                   </div>
@@ -169,6 +176,24 @@ export default function FloatingCartBar() {
               <div className="flex justify-between font-display text-lg font-black">
                 <span>Subtotal</span>
                 <span data-testid="drawer-subtotal">{formatRupiah(subtotal)}</span>
+              </div>
+              <div className="mt-3">
+                <VoucherBox
+                  subtotal={subtotal}
+                  applied={drawerVoucher}
+                  onApplied={(v) => {
+                    setDrawerVoucher(v)
+                    if (v?.code) {
+                      try {
+                        localStorage.setItem('slaras_voucher_code', v.code)
+                      } catch {
+                        // abaikan
+                      }
+                    }
+                  }}
+                  persistCode
+                  initialCode={loadVoucherCode()}
+                />
               </div>
               <p className="mt-1 text-xs text-zinc-500">
                 Ongkir dihitung di halaman checkout (gratis ≥ Rp500.000).

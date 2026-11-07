@@ -1,15 +1,17 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Bike, MapPin, QrCode, Store, UtensilsCrossed, Wallet } from 'lucide-react'
-import { addressApi, orderApi } from '../api/endpoints'
+import { addressApi, loyaltyApi, orderApi } from '../api/endpoints'
 import { apiErrorMessage } from '../api/client'
-import type { Address, GuestCheckoutInput, Order, OrderType } from '../api/types'
+import type { Address, GuestCheckoutInput, LoyaltyInfo, Order, OrderType, VoucherValidation } from '../api/types'
 import { useCart } from '../context/CartContext'
 import { useAuth } from '../context/AuthContext'
 import { formatRupiah, shippingCost } from '../utils/format'
 import { Spinner } from '../components/ProtectedRoute'
 import { PaymentModal } from '../components/PaymentModal'
+import VoucherBox, { loadVoucherCode } from '../components/VoucherBox'
 import { saveGuestOrder } from '../utils/guestOrders'
+import { getSavedTable, tableLabel } from '../utils/table'
 
 const ORDER_TYPES: { value: OrderType; label: string; icon: typeof UtensilsCrossed }[] = [
   { value: 'dine_in', label: 'Dine-In (Makan di Tempat)', icon: UtensilsCrossed },
@@ -83,6 +85,38 @@ export default function Checkout() {
   const [tableNumber, setTableNumber] = useState('')
   const [delivery, setDelivery] = useState({ street: '', city: '', province: '', postal_code: '' })
 
+  // --- Voucher & loyalitas (tamu) ---
+  const [voucher, setVoucher] = useState<VoucherValidation | null>(null)
+  const [loyalty, setLoyalty] = useState<LoyaltyInfo | null>(null)
+  const [loyaltyLoading, setLoyaltyLoading] = useState(false)
+
+  // Meja dari QR (?table=XX) otomatis mengunci Dine-In + nomor meja.
+  useEffect(() => {
+    const saved = getSavedTable()
+    if (saved && !user) {
+      setOrderType('dine_in')
+      setTableNumber(tableLabel(saved))
+    }
+  }, [user])
+
+  // Cek stamp loyalitas saat nomor WhatsApp diketik (debounce 600ms).
+  useEffect(() => {
+    const digits = phone.replace(/\D/g, '')
+    if (digits.length < 9) {
+      setLoyalty(null)
+      return
+    }
+    setLoyaltyLoading(true)
+    const t = window.setTimeout(() => {
+      loyaltyApi
+        .get(phone.trim())
+        .then(setLoyalty)
+        .catch(() => setLoyalty(null))
+        .finally(() => setLoyaltyLoading(false))
+    }, 600)
+    return () => window.clearTimeout(t)
+  }, [phone])
+
   useEffect(() => {
     if (!user) {
       setLoadingAddr(false)
@@ -111,6 +145,8 @@ export default function Checkout() {
     : items.length > 0
       ? shippingCost(subtotal)
       : 0
+  const discount = !user && voucher?.valid ? voucher.discount_amount : 0
+  const grandTotal = Math.max(0, subtotal - discount + shipping)
 
   if (cartLoading || loadingAddr) return <Spinner label="Menyiapkan checkout..." />
 
@@ -158,6 +194,10 @@ export default function Checkout() {
           product_id: it.product_id,
           quantity: it.quantity,
           notes: it.notes?.trim() || undefined,
+          selected_modifiers:
+            it.selected_modifiers && it.selected_modifiers.length > 0
+              ? it.selected_modifiers
+              : undefined,
         })),
         customer_name: name,
         customer_phone: phone.trim() || undefined,
@@ -165,6 +205,7 @@ export default function Checkout() {
         table_number: orderType === 'dine_in' ? tableNumber : undefined,
         payment_method: method === 'va' ? 'va' : 'qris',
         notes: notes.trim() || undefined,
+        voucher_code: voucher?.valid && voucher.code ? voucher.code : undefined,
         delivery_address:
           orderType === 'delivery'
             ? {
@@ -345,30 +386,46 @@ export default function Checkout() {
                   </div>
 
                   {orderType === 'dine_in' && (
-                    <div>
-                      <span className="label">Nomor Meja *</span>
-                      <div className="grid grid-cols-5 gap-2">
-                        {Array.from({ length: 20 }, (_, i) => i + 1).map((n) => {
-                          const label = `Meja ${n}`
-                          const active = tableNumber === label
-                          return (
-                            <button
-                              key={n}
-                              type="button"
-                              onClick={() => setTableNumber(label)}
-                              aria-pressed={active}
-                              className={`border-2 px-2 py-2.5 font-display text-xs font-black uppercase transition-all sm:text-sm ${
-                                active
-                                  ? 'border-black bg-yolk text-black shadow-[3px_3px_0px_0px_#000] dark:border-white dark:shadow-[3px_3px_0px_0px_#fff]'
-                                  : 'border-zinc-300 hover:border-black dark:border-zinc-700 dark:hover:border-white'
-                              }`}
-                            >
-                              {label}
-                            </button>
-                          )
-                        })}
+                    <>
+                      <div>
+                        <span className="label">Nomor Meja *</span>
+                        <div className="grid grid-cols-5 gap-2">
+                          {Array.from({ length: 20 }, (_, i) => i + 1).map((n) => {
+                            const label = `Meja ${n}`
+                            // Bandingkan numerik: meja dari QR tersimpan "Meja 05".
+                            const active = Number((tableNumber.match(/\d+/) ?? ['0'])[0]) === n
+                            return (
+                              <button
+                                key={n}
+                                type="button"
+                                onClick={() => setTableNumber(label)}
+                                aria-pressed={active}
+                                className={`border-2 px-2 py-2.5 font-display text-xs font-black uppercase transition-all sm:text-sm ${
+                                  active
+                                    ? 'border-black bg-yolk text-black shadow-[3px_3px_0px_0px_#000] dark:border-white dark:shadow-[3px_3px_0px_0px_#fff]'
+                                    : 'border-zinc-300 hover:border-black dark:border-zinc-700 dark:hover:border-white'
+                                }`}
+                              >
+                                {label}
+                              </button>
+                            )
+                          })}
+                        </div>
                       </div>
-                    </div>
+                      <div>
+                        <label className="label" htmlFor="customer-phone-dinein">
+                          No. WhatsApp (opsional — untuk cek stamp loyalitas)
+                        </label>
+                        <input
+                          id="customer-phone-dinein"
+                          className="input"
+                          inputMode="tel"
+                          placeholder="Contoh: 081234567890"
+                          value={phone}
+                          onChange={(e) => setPhone(e.target.value)}
+                        />
+                      </div>
+                    </>
                   )}
 
                   {orderType !== 'dine_in' && (
@@ -385,6 +442,21 @@ export default function Checkout() {
                         onChange={(e) => setPhone(e.target.value)}
                       />
                     </div>
+                  )}
+
+                  {/* Badge progres stamp loyalitas (debounce saat mengetik WA). */}
+                  {loyaltyLoading && (
+                    <p className="text-xs font-semibold text-zinc-500">Mengecek stamp loyalitas...</p>
+                  )}
+                  {!loyaltyLoading && loyalty && (
+                    <p
+                      data-testid="loyalty-badge"
+                      className="border-2 border-black bg-yolk px-3 py-2 text-sm font-bold text-black dark:border-white"
+                    >
+                      {loyalty.reward_eligible
+                        ? `🎉 Kamu punya ${loyalty.points} Stamp SLARAS — reward tersedia! Tukar di kasir.`
+                        : `🔥 Kamu punya ${loyalty.points}/10 Stamp SLARAS! ${Math.max(0, 10 - loyalty.points)} pesanan lagi gratis Kopi Susu!`}
+                    </p>
                   )}
 
                   {orderType === 'delivery' && (
@@ -526,13 +598,29 @@ export default function Checkout() {
               <span>Subtotal</span>
               <span className="font-bold">{formatRupiah(subtotal)}</span>
             </div>
+            {!user && (
+              <div className="mt-1">
+                <VoucherBox
+                  subtotal={subtotal}
+                  applied={voucher}
+                  onApplied={setVoucher}
+                  initialCode={loadVoucherCode()}
+                />
+              </div>
+            )}
+            {discount > 0 && (
+              <div className="flex justify-between font-bold text-green-700 dark:text-green-400">
+                <span>Diskon voucher ({voucher?.code})</span>
+                <span data-testid="voucher-discount">−{formatRupiah(discount)}</span>
+              </div>
+            )}
             <div className="flex justify-between">
               <span>Ongkir{!user && orderType === 'delivery' ? ' (estimasi)' : ''}</span>
               <span className="font-bold">{shipping === 0 ? 'GRATIS' : formatRupiah(shipping)}</span>
             </div>
             <div className="flex justify-between font-display text-lg font-black">
               <span>Total</span>
-              <span>{formatRupiah(subtotal + shipping)}</span>
+              <span data-testid="checkout-total">{formatRupiah(grandTotal)}</span>
             </div>
           </div>
           {error && (
@@ -541,7 +629,7 @@ export default function Checkout() {
             </p>
           )}
           <button type="submit" disabled={busy || items.length === 0} className="btn btn-accent mt-5 w-full">
-            {busy ? 'Memproses...' : `Bayar Sekarang • ${formatRupiah(subtotal + shipping)}`}
+            {busy ? 'Memproses...' : `Bayar Sekarang • ${formatRupiah(grandTotal)}`}
           </button>
           {!user && (
             <p className="mt-3 text-center text-xs text-zinc-500">

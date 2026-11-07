@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { Pencil, Plus, Trash2 } from 'lucide-react'
-import { catalogApi, orderApi } from '../api/endpoints'
-import { apiErrorMessage } from '../api/client'
+import { catalogApi, orderApi, voucherAdminApi } from '../api/endpoints'
+import { apiErrorMessage, uploadImage } from '../api/client'
 import { useAuth } from '../context/AuthContext'
-import type { Category, CategoryInput, Order, OrderStatus, Product, ProductInput } from '../api/types'
+import type { Category, CategoryInput, Order, OrderStatus, Product, ProductInput, Voucher, VoucherInput } from '../api/types'
 import { formatDate, formatRupiah } from '../utils/format'
 import { Modal, Spinner } from '../components/ProtectedRoute'
 import { NEXT_STATUS, StatusBadge } from '../components/StatusBadge'
@@ -12,7 +12,18 @@ import ProductImage from '../components/ProductImage'
 import ProfitDashboard from './ProfitDashboard'
 import UserManagement from './UserManagement'
 
-type Tab = 'profit' | 'products' | 'categories' | 'orders' | 'users'
+type Tab = 'profit' | 'products' | 'categories' | 'orders' | 'vouchers' | 'users'
+
+const EMPTY_VOUCHER: VoucherInput = {
+  code: '',
+  discount_type: 'percentage',
+  discount_value: 0,
+  min_order_amount: 0,
+  max_discount: 0,
+  quota: 0,
+  is_active: true,
+  expires_at: null,
+}
 
 const EMPTY_PRODUCT: ProductInput = {
   category_id: '',
@@ -46,6 +57,7 @@ export default function Admin() {
   const [categories, setCategories] = useState<Category[]>([])
   const [products, setProducts] = useState<Product[]>([])
   const [orders, setOrders] = useState<Order[]>([])
+  const [vouchers, setVouchers] = useState<Voucher[]>([])
   const [loading, setLoading] = useState(true)
 
   const [productModal, setProductModal] = useState<{ open: boolean; editing: Product | null }>({
@@ -54,6 +66,7 @@ export default function Admin() {
   })
   const [productForm, setProductForm] = useState<ProductInput>(EMPTY_PRODUCT)
   const [savingProduct, setSavingProduct] = useState(false)
+  const [uploadingImage, setUploadingImage] = useState(false)
 
   const [categoryModal, setCategoryModal] = useState<{ open: boolean; editing: Category | null }>({
     open: false,
@@ -63,6 +76,27 @@ export default function Admin() {
   const [savingCategory, setSavingCategory] = useState(false)
 
   const [busyId, setBusyId] = useState<string | null>(null)
+
+  const [voucherModal, setVoucherModal] = useState<{ open: boolean; editing: Voucher | null }>({
+    open: false,
+    editing: null,
+  })
+  const [voucherForm, setVoucherForm] = useState<VoucherInput>(EMPTY_VOUCHER)
+  const [savingVoucher, setSavingVoucher] = useState(false)
+
+  // Voucher dimuat terpisah & non-blocking: bila endpoint belum tersedia di
+  // backend, panel admin tetap jalan (daftar voucher kosong).
+  const fetchVouchers = useCallback(async () => {
+    try {
+      setVouchers(await voucherAdminApi.list())
+    } catch {
+      setVouchers([])
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchVouchers()
+  }, [fetchVouchers])
 
   const fetchAll = useCallback(async () => {
     setLoading(true)
@@ -114,6 +148,27 @@ export default function Admin() {
     setProductModal({ open: true, editing: p })
   }
 
+  const handleUploadImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    if (file.size > 5 * 1024 * 1024) {
+      setError('Ukuran file maksimal 5MB')
+      return
+    }
+    setError('')
+    setUploadingImage(true)
+    try {
+      const url = await uploadImage(file)
+      setProductForm({ ...productForm, image_url: url })
+      flash('Foto berhasil diunggah')
+    } catch (err) {
+      setError(apiErrorMessage(err, 'Upload foto gagal'))
+    } finally {
+      setUploadingImage(false)
+    }
+  }
+
   const saveProduct = async (e: FormEvent) => {
     e.preventDefault()
     setError('')
@@ -156,6 +211,111 @@ export default function Admin() {
       await fetchAll()
     } catch (err) {
       setError(apiErrorMessage(err, 'Gagal menghapus produk'))
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  /** 1-Click Sold Out: toggle is_available tanpa mengubah stok. */
+  const toggleAvailability = async (p: Product) => {
+    const next = !(p.is_available ?? true)
+    setBusyId(p.id)
+    try {
+      await catalogApi.setAvailability(p.id, next)
+      setProducts((list) => list.map((x) => (x.id === p.id ? { ...x, is_available: next } : x)))
+      flash(next ? `"${p.name}" kembali TERSEDIA` : `"${p.name}" ditandai HABIS HARI INI`)
+    } catch (err) {
+      setError(apiErrorMessage(err, 'Gagal mengubah ketersediaan produk'))
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  /** Kontrol stok cepat +/- langsung dari kartu produk admin. */
+  const adjustStock = async (p: Product, delta: number) => {
+    const nextStock = Math.max(0, p.stock + delta)
+    if (nextStock === p.stock) return
+    setBusyId(p.id)
+    try {
+      await catalogApi.updateProduct(p.id, {
+        category_id: p.category_id,
+        name: p.name,
+        slug: p.slug,
+        description: p.description,
+        price: p.price,
+        cost_price: p.cost_price ?? 0,
+        stock: nextStock,
+        sku: p.sku,
+        image_url: p.image_url,
+        weight_gram: p.weight_gram,
+        is_active: p.is_active,
+      })
+      setProducts((list) => list.map((x) => (x.id === p.id ? { ...x, stock: nextStock } : x)))
+    } catch (err) {
+      setError(apiErrorMessage(err, 'Gagal mengubah stok'))
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  // ---------- Voucher ----------
+  const openVoucherForm = (v: Voucher | null) => {
+    if (v) {
+      setVoucherForm({
+        code: v.code,
+        discount_type: v.discount_type,
+        discount_value: v.discount_value,
+        min_order_amount: v.min_order_amount,
+        max_discount: v.max_discount,
+        quota: v.quota,
+        is_active: v.is_active,
+        expires_at: v.expires_at ? String(v.expires_at).slice(0, 10) : null,
+      })
+    } else {
+      setVoucherForm(EMPTY_VOUCHER)
+    }
+    setVoucherModal({ open: true, editing: v })
+  }
+
+  const saveVoucher = async (e: FormEvent) => {
+    e.preventDefault()
+    setError('')
+    setSavingVoucher(true)
+    try {
+      const input: VoucherInput = {
+        ...voucherForm,
+        code: voucherForm.code.trim().toUpperCase(),
+        discount_value: Number(voucherForm.discount_value),
+        min_order_amount: Number(voucherForm.min_order_amount) || 0,
+        max_discount: Number(voucherForm.max_discount) || 0,
+        quota: Number(voucherForm.quota) || 0,
+        expires_at: voucherForm.expires_at ? `${voucherForm.expires_at}T23:59:59Z` : null,
+      }
+      if (voucherModal.editing) {
+        await voucherAdminApi.update(voucherModal.editing.id, input)
+        flash('Voucher diperbarui')
+      } else {
+        await voucherAdminApi.create(input)
+        flash('Voucher dibuat')
+      }
+      setVoucherModal({ open: false, editing: null })
+      await fetchVouchers()
+    } catch (err) {
+      setError(apiErrorMessage(err, 'Gagal menyimpan voucher'))
+    } finally {
+      setSavingVoucher(false)
+    }
+  }
+
+  const deleteVoucher = async (v: Voucher) => {
+    if (!window.confirm(`Hapus voucher "${v.code}"?`)) return
+    setBusyId(v.id)
+    try {
+      await voucherAdminApi.remove(v.id)
+      flash('Voucher dihapus')
+      await fetchVouchers()
+    } catch (err) {
+      setError(apiErrorMessage(err, 'Gagal menghapus voucher'))
     } finally {
       setBusyId(null)
     }
@@ -265,6 +425,9 @@ export default function Admin() {
         <button className={tabCls('orders')} onClick={() => setTab('orders')}>
           Pesanan ({orders.length})
         </button>
+        <button className={tabCls('vouchers')} onClick={() => setTab('vouchers')}>
+          Kelola Voucher ({vouchers.length})
+        </button>
         {isSuperAdmin && (
           <button className={tabCls('users')} onClick={() => setTab('users')}>
             Manajemen User &amp; Akses
@@ -290,14 +453,49 @@ export default function Admin() {
                 <div className="min-w-0 flex-1">
                   <p className="font-display text-base font-black uppercase">{p.name}</p>
                   <p className="text-sm text-zinc-600 dark:text-zinc-400">
-                    {p.category?.name ?? '-'} • {p.sku} • Stok {p.stock} •{' '}
+                    {p.category?.name ?? '-'} • {p.sku} •{' '}
                     {p.is_active ? 'Aktif' : 'Nonaktif'}
                     {p.cost_price !== undefined && p.cost_price > 0 && (
                       <> • HPP {formatRupiah(p.cost_price)}</>
                     )}
                   </p>
+                  <p className="mt-1 text-sm font-bold">
+                    {(p.is_available ?? true) ? (
+                      <span className="text-green-700 dark:text-green-400">[ TERSEDIA ]</span>
+                    ) : (
+                      <span className="text-red-600">[ HABIS HARI INI ]</span>
+                    )}
+                  </p>
                 </div>
                 <span className="font-display text-lg font-black">{formatRupiah(p.price)}</span>
+                {/* Kontrol stok cepat +/- */}
+                <span className="flex items-center border-2 border-black dark:border-white" title="Stok cepat">
+                  <button
+                    onClick={() => adjustStock(p, -1)}
+                    disabled={busyId === p.id || p.stock <= 0}
+                    className="px-2.5 py-1.5 font-display text-base font-black hover:bg-zinc-100 disabled:opacity-40 dark:hover:bg-zinc-800"
+                    aria-label={`Kurangi stok ${p.name}`}
+                  >
+                    −
+                  </button>
+                  <span className="w-10 text-center font-display text-sm font-black">Stok {p.stock}</span>
+                  <button
+                    onClick={() => adjustStock(p, 1)}
+                    disabled={busyId === p.id}
+                    className="px-2.5 py-1.5 font-display text-base font-black hover:bg-zinc-100 disabled:opacity-40 dark:hover:bg-zinc-800"
+                    aria-label={`Tambah stok ${p.name}`}
+                  >
+                    +
+                  </button>
+                </span>
+                <button
+                  onClick={() => toggleAvailability(p)}
+                  disabled={busyId === p.id}
+                  className={`btn btn-sm ${(p.is_available ?? true) ? 'btn-ghost' : 'btn-danger'}`}
+                  title="Toggle Sold Out 1-klik"
+                >
+                  {(p.is_available ?? true) ? 'Tandai Habis' : 'Tandai Tersedia'}
+                </button>
                 <button onClick={() => openProductForm(p)} className="btn btn-ghost btn-sm">
                   <Pencil className="h-4 w-4" /> Ubah
                 </button>
@@ -394,6 +592,52 @@ export default function Admin() {
             </article>
           ))}
           {orders.length === 0 && <p className="card p-6 text-center">Belum ada pesanan masuk.</p>}
+        </section>
+      )}
+
+      {tab === 'vouchers' && (
+        <section className="mt-6">
+          <button onClick={() => openVoucherForm(null)} className="btn btn-accent btn-sm">
+            <Plus className="h-4 w-4" /> Buat Voucher
+          </button>
+          <div className="mt-4 flex flex-col gap-3">
+            {vouchers.map((v) => (
+              <article key={v.id} className="card flex flex-wrap items-center gap-3 p-4">
+                <div className="min-w-0 flex-1">
+                  <p className="font-display text-base font-black uppercase">{v.code}</p>
+                  <p className="text-sm text-zinc-600 dark:text-zinc-400">
+                    {v.discount_type === 'percentage'
+                      ? `Diskon ${v.discount_value}%`
+                      : `Potongan ${formatRupiah(v.discount_value)}`}
+                    {v.max_discount > 0 && ` • maks ${formatRupiah(v.max_discount)}`}
+                    {v.min_order_amount > 0 && ` • min belanja ${formatRupiah(v.min_order_amount)}`}
+                    {` • dipakai ${v.used_count}/${v.quota > 0 ? v.quota : '∞'}`}
+                    {v.expires_at ? ` • s.d. ${String(v.expires_at).slice(0, 10)}` : ''}
+                  </p>
+                </div>
+                <span
+                  className={`chip ${v.is_active ? 'bg-yolk !text-black' : 'bg-zinc-200 dark:bg-zinc-700'}`}
+                >
+                  {v.is_active ? 'AKTIF' : 'NONAKTIF'}
+                </span>
+                <button onClick={() => openVoucherForm(v)} className="btn btn-ghost btn-sm">
+                  <Pencil className="h-4 w-4" /> Ubah
+                </button>
+                <button
+                  onClick={() => deleteVoucher(v)}
+                  disabled={busyId === v.id}
+                  className="btn btn-danger btn-sm"
+                >
+                  <Trash2 className="h-4 w-4" /> Hapus
+                </button>
+              </article>
+            ))}
+            {vouchers.length === 0 && (
+              <p className="card p-6 text-center">
+                Belum ada voucher. Buat kode promo pertama, mis. SLARASHEMAT (20%, maks Rp15.000).
+              </p>
+            )}
+          </div>
         </section>
       )}
 
@@ -517,6 +761,16 @@ export default function Admin() {
               value={productForm.image_url}
               onChange={(e) => setProductForm({ ...productForm, image_url: e.target.value })}
             />
+            <label className="btn btn-outline mt-2 w-full cursor-pointer">
+              {uploadingImage ? 'Mengunggah...' : 'UPLOAD FOTO DARI PERANGKAT'}
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                disabled={uploadingImage}
+                onChange={handleUploadImage}
+              />
+            </label>
           </div>
           <label className="flex items-center gap-2 text-sm font-semibold">
             <input
@@ -529,6 +783,121 @@ export default function Admin() {
           </label>
           <button type="submit" disabled={savingProduct} className="btn btn-accent w-full">
             {savingProduct ? 'Menyimpan...' : productModal.editing ? 'Simpan Perubahan' : 'Buat Produk'}
+          </button>
+        </form>
+      </Modal>
+
+      {/* Modal form voucher */}
+      <Modal
+        open={voucherModal.open}
+        onClose={() => setVoucherModal({ open: false, editing: null })}
+        title={voucherModal.editing ? 'Ubah Voucher' : 'Buat Voucher'}
+      >
+        <form onSubmit={saveVoucher} className="flex flex-col gap-3">
+          <div>
+            <label className="label">Kode Voucher</label>
+            <input
+              className="input uppercase"
+              placeholder="Contoh: SLARASHEMAT"
+              value={voucherForm.code}
+              onChange={(e) => setVoucherForm({ ...voucherForm, code: e.target.value.toUpperCase() })}
+              required
+              maxLength={30}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">Jenis Diskon</label>
+              <select
+                className="input"
+                value={voucherForm.discount_type}
+                onChange={(e) =>
+                  setVoucherForm({
+                    ...voucherForm,
+                    discount_type: e.target.value as 'percentage' | 'fixed',
+                  })
+                }
+              >
+                <option value="percentage">Persentase (%)</option>
+                <option value="fixed">Potongan tetap (Rp)</option>
+              </select>
+            </div>
+            <div>
+              <label className="label">
+                Nilai Diskon {voucherForm.discount_type === 'percentage' ? '(%)' : '(Rp)'}
+              </label>
+              <input
+                className="input"
+                type="number"
+                min={0}
+                value={voucherForm.discount_value}
+                onChange={(e) =>
+                  setVoucherForm({ ...voucherForm, discount_value: Number(e.target.value) })
+                }
+                required
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">Min. Belanja (Rp)</label>
+              <input
+                className="input"
+                type="number"
+                min={0}
+                value={voucherForm.min_order_amount}
+                onChange={(e) =>
+                  setVoucherForm({ ...voucherForm, min_order_amount: Number(e.target.value) })
+                }
+              />
+            </div>
+            <div>
+              <label className="label">Maks. Diskon (Rp, 0 = tanpa batas)</label>
+              <input
+                className="input"
+                type="number"
+                min={0}
+                value={voucherForm.max_discount}
+                onChange={(e) =>
+                  setVoucherForm({ ...voucherForm, max_discount: Number(e.target.value) })
+                }
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">Kuota (0 = tanpa batas)</label>
+              <input
+                className="input"
+                type="number"
+                min={0}
+                value={voucherForm.quota}
+                onChange={(e) => setVoucherForm({ ...voucherForm, quota: Number(e.target.value) })}
+              />
+            </div>
+            <div>
+              <label className="label">Berlaku s.d. (opsional)</label>
+              <input
+                className="input"
+                type="date"
+                value={voucherForm.expires_at ? String(voucherForm.expires_at).slice(0, 10) : ''}
+                onChange={(e) =>
+                  setVoucherForm({ ...voucherForm, expires_at: e.target.value || null })
+                }
+              />
+            </div>
+          </div>
+          <label className="flex items-center gap-2 text-sm font-semibold">
+            <input
+              type="checkbox"
+              className="h-4 w-4 accent-black"
+              checked={voucherForm.is_active}
+              onChange={(e) => setVoucherForm({ ...voucherForm, is_active: e.target.checked })}
+            />
+            Voucher aktif
+          </label>
+          <button type="submit" disabled={savingVoucher} className="btn btn-accent w-full">
+            {savingVoucher ? 'Menyimpan...' : voucherModal.editing ? 'Simpan Perubahan' : 'Buat Voucher'}
           </button>
         </form>
       </Modal>

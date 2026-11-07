@@ -10,17 +10,23 @@ import type {
   CategoryInput,
   CreateUserInput,
   GuestCheckoutInput,
+  LoyaltyInfo,
   Order,
   OrderStatus,
   Product,
   ProductInput,
   ProfitAnalytics,
   ProfitPeriod,
+  QueueItem,
+  QueueResponse,
   User,
   UserListFilters,
   UserListMeta,
   UserRole,
   UserStats,
+  Voucher,
+  VoucherInput,
+  VoucherValidation,
 } from './types'
 
 export interface ProductFilters {
@@ -106,6 +112,72 @@ export const catalogApi = {
   },
   async deleteProduct(id: string): Promise<void> {
     await api.delete(`/products/${id}`)
+  },
+  /** Toggle cepat Sold Out 1-klik (admin/superadmin). */
+  async setAvailability(id: string, isAvailable: boolean): Promise<Product> {
+    const res = await api.patch<ApiResponse<Product>>(`/products/${id}/availability`, {
+      is_available: isAvailable,
+    })
+    return res.data.data as Product
+  },
+}
+
+// ---------- Voucher promo (publik: validasi) ----------
+export const voucherApi = {
+  async validate(code: string, subtotal: number): Promise<VoucherValidation> {
+    const res = await api.post<ApiResponse<VoucherValidation>>('/vouchers/validate', {
+      code,
+      subtotal,
+    })
+    return (res.data.data ?? res.data) as VoucherValidation
+  },
+}
+
+// ---------- Loyalitas (publik: cek stamp via nomor HP) ----------
+export const loyaltyApi = {
+  async get(phone: string): Promise<LoyaltyInfo> {
+    const res = await api.get<ApiResponse<LoyaltyInfo>>(
+      `/loyalty/${encodeURIComponent(phone)}`,
+    )
+    return (res.data.data ?? res.data) as LoyaltyInfo
+  },
+}
+
+// ---------- Antrean TV (publik) ----------
+// Menerima dua bentuk respons backend: {preparing, ready} atau array datar.
+export const queueApi = {
+  async get(): Promise<QueueResponse> {
+    const res = await api.get<ApiResponse<QueueResponse | QueueItem[]>>('/orders/queue')
+    const data = res.data.data as QueueResponse | QueueItem[] | undefined
+    if (Array.isArray(data)) {
+      return {
+        preparing: data.filter((i) => i.status === 'processing' || i.status === 'paid'),
+        ready: data.filter((i) => i.status === 'completed' || i.status === 'shipped'),
+      }
+    }
+    return {
+      preparing: data?.preparing ?? [],
+      ready: data?.ready ?? [],
+    }
+  },
+}
+
+// ---------- Voucher promo (admin/superadmin CRUD) ----------
+export const voucherAdminApi = {
+  async list(): Promise<Voucher[]> {
+    const res = await api.get<ApiResponse<Voucher[]>>('/admin/vouchers')
+    return res.data.data ?? []
+  },
+  async create(input: VoucherInput): Promise<Voucher> {
+    const res = await api.post<ApiResponse<Voucher>>('/admin/vouchers', input)
+    return res.data.data as Voucher
+  },
+  async update(id: string, input: VoucherInput): Promise<Voucher> {
+    const res = await api.put<ApiResponse<Voucher>>(`/admin/vouchers/${id}`, input)
+    return res.data.data as Voucher
+  },
+  async remove(id: string): Promise<void> {
+    await api.delete(`/admin/vouchers/${id}`)
   },
 }
 

@@ -87,6 +87,10 @@ export interface Product {
   image_url: string
   weight_gram: number
   is_active: boolean
+  /** Toggle cepat Sold Out 1-klik (false = HABIS HARI INI, tanpa ubah stok). */
+  is_available?: boolean
+  /** JSON opsi modifier: {groups:[{name, type, options:[{name, price_delta, cost_delta}]}]} */
+  modifiers_json?: string | Record<string, unknown> | null
   created_at: string
   updated_at: string
 }
@@ -115,6 +119,8 @@ export interface CartItem {
   price: number
   /** Catatan per item, hanya dipakai keranjang tamu (localStorage). */
   notes?: string
+  /** Varian/add-on yang dipilih (keranjang tamu). */
+  selected_modifiers?: import('../utils/modifiers').SelectedModifier[]
   created_at: string
   updated_at: string
 }
@@ -139,6 +145,8 @@ export interface OrderItem {
   subtotal: number
   /** Catatan per item, mis. "less sugar / normal ice". */
   notes?: string
+  /** Ringkasan varian/add-on yang dipilih, mis. "Iced, Less Sugar, +Extra Espresso Shot". */
+  selected_modifiers?: string
   created_at: string
   updated_at: string
 }
@@ -186,6 +194,10 @@ export interface Order {
   status: OrderStatus
   subtotal: number
   shipping_cost: number
+  /** Potongan voucher (0 bila tanpa voucher). */
+  discount_amount?: number
+  /** Kode voucher yang dipakai, bila ada. */
+  voucher_code?: string
   total: number
   payment_method: string
   notes: string
@@ -199,9 +211,15 @@ export interface Order {
 
 /** Item keranjang tamu yang disimpan di localStorage. */
 export interface GuestCartItem {
+  /** Kunci baris: product_id, atau product_id|varian terurut (bila bermodifier). */
+  key: string
   product_id: string
   quantity: number
   notes: string
+  /** Varian/add-on yang dipilih untuk baris ini. */
+  selected_modifiers: import('../utils/modifiers').SelectedModifier[]
+  /** Harga satuan = harga dasar + jumlah price_delta modifier. */
+  unit_price: number
   product: {
     id: string
     name: string
@@ -215,6 +233,7 @@ export interface GuestCheckoutItemInput {
   product_id: string
   quantity: number
   notes?: string
+  selected_modifiers?: import('../utils/modifiers').SelectedModifier[]
 }
 
 export interface GuestDeliveryAddressInput {
@@ -232,7 +251,64 @@ export interface GuestCheckoutInput {
   table_number?: string
   payment_method: 'qris' | 'va'
   notes?: string
+  /** Kode voucher promo (divalidasi server; potongan dihitung server). */
+  voucher_code?: string
   delivery_address?: GuestDeliveryAddressInput
+}
+
+// ---------- Voucher promo ----------
+export interface Voucher {
+  id: string
+  code: string
+  discount_type: 'percentage' | 'fixed'
+  discount_value: number
+  min_order_amount: number
+  max_discount: number
+  quota: number
+  used_count: number
+  is_active: boolean
+  expires_at?: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface VoucherInput {
+  code: string
+  discount_type: 'percentage' | 'fixed'
+  discount_value: number
+  min_order_amount?: number
+  max_discount?: number
+  quota?: number
+  is_active?: boolean
+  expires_at?: string | null
+}
+
+export interface VoucherValidation {
+  valid: boolean
+  discount_amount: number
+  message: string
+  code?: string
+}
+
+// ---------- Loyalitas (stamp via nomor WhatsApp) ----------
+export interface LoyaltyInfo {
+  phone: string
+  points: number
+  reward_eligible: boolean
+}
+
+// ---------- Antrean TV (/queue) ----------
+export interface QueueItem {
+  order_number: string
+  customer_name: string
+  order_type?: OrderType | string
+  table_number?: string
+  status: OrderStatus | string
+}
+
+export interface QueueResponse {
+  preparing: QueueItem[]
+  ready: QueueItem[]
 }
 
 /** Ringkasan order tamu yang disimpan di localStorage ("Pesanan Saya"). */

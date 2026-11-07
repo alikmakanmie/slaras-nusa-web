@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { Printer, RefreshCw, Search, UtensilsCrossed } from 'lucide-react'
+import { MessageCircle, Printer, RefreshCw, Search, UtensilsCrossed } from 'lucide-react'
+import { QRCodeSVG } from 'qrcode.react'
 import { orderApi } from '../api/endpoints'
 import { apiErrorMessage } from '../api/client'
 import type { Order } from '../api/types'
@@ -64,6 +65,33 @@ export default function TrackOrder() {
     if (number) navigate(`/track/${number}`)
   }
 
+  // Ringkasan struk untuk WhatsApp + URL tracking untuk QR struk thermal.
+  const trackingUrl = order
+    ? `${window.location.origin}/track/${order.order_number}`
+    : ''
+  const waPhone = order
+    ? (order.customer_phone ?? order.shipping_phone ?? '').replace(/\D/g, '')
+    : ''
+  const waText = order
+    ? [
+        `*SLARAS NUSA FOODLAB* — Struk ${order.order_number}`,
+        ...order.items.map(
+          (i) =>
+            `${i.quantity}x ${i.product_name} — ${formatRupiah(i.subtotal)}${i.selected_modifiers ? ` (${i.selected_modifiers})` : ''}${i.notes ? ` [${i.notes}]` : ''}`,
+        ),
+        `Subtotal: ${formatRupiah(order.subtotal)}`,
+        ...(order.discount_amount && order.discount_amount > 0
+          ? [`Diskon voucher${order.voucher_code ? ` (${order.voucher_code})` : ''}: -${formatRupiah(order.discount_amount)}`]
+          : []),
+        `Ongkir: ${order.shipping_cost === 0 ? 'GRATIS' : formatRupiah(order.shipping_cost)}`,
+        `*Total: ${formatRupiah(order.total)}*`,
+        `Lacak pesanan: ${trackingUrl}`,
+      ].join('\n')
+    : ''
+  const waUrl = waPhone
+    ? `https://wa.me/${waPhone}?text=${encodeURIComponent(waText)}`
+    : `https://wa.me/?text=${encodeURIComponent(waText)}`
+
   if (loading) return <Spinner label="Mencari pesanan..." />
 
   return (
@@ -101,7 +129,7 @@ export default function TrackOrder() {
       )}
 
       {order && (
-        <article className="card mt-6 p-6">
+        <article className="card print-area mt-6 p-6">
           <div className="flex flex-wrap items-start justify-between gap-3 border-b-2 border-black pb-4 dark:border-white">
             <div className="flex items-center gap-3">
               <span className="flex h-11 w-11 items-center justify-center border-2 border-black bg-yolk text-black dark:border-white">
@@ -162,6 +190,11 @@ export default function TrackOrder() {
                     Catatan: {item.notes}
                   </span>
                 )}
+                {item.selected_modifiers && (
+                  <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                    Varian: {item.selected_modifiers}
+                  </span>
+                )}
               </li>
             ))}
           </ul>
@@ -171,6 +204,12 @@ export default function TrackOrder() {
               <span>Subtotal</span>
               <span className="font-bold">{formatRupiah(order.subtotal)}</span>
             </div>
+            {order.discount_amount !== undefined && order.discount_amount > 0 && (
+              <div className="flex justify-between font-bold text-green-700 dark:text-green-400">
+                <span>Diskon voucher{order.voucher_code ? ` (${order.voucher_code})` : ''}</span>
+                <span>−{formatRupiah(order.discount_amount)}</span>
+              </div>
+            )}
             <div className="flex justify-between">
               <span>Ongkir</span>
               <span className="font-bold">{order.shipping_cost === 0 ? 'GRATIS' : formatRupiah(order.shipping_cost)}</span>
@@ -179,6 +218,15 @@ export default function TrackOrder() {
               <span>Total</span>
               <span>{formatRupiah(order.total)}</span>
             </div>
+          </div>
+
+          {/* QR pelacakan — tampil di struk thermal saat dicetak. */}
+          <div className="thermal-qr mt-5 flex flex-col items-center gap-2 border-t-2 border-dashed border-zinc-400 pt-4">
+            <QRCodeSVG value={trackingUrl} size={128} />
+            <p className="text-center font-display text-xs font-black uppercase">
+              Scan untuk lacak pesanan
+            </p>
+            <p className="text-center text-xs break-all">{trackingUrl}</p>
           </div>
 
           {order.notes && (
@@ -195,7 +243,7 @@ export default function TrackOrder() {
             </p>
           )}
 
-          <div className="mt-6 flex flex-wrap gap-3">
+          <div className="mt-6 flex flex-wrap gap-3 print:hidden">
             <button
               onClick={() => fetchOrder(order.order_number)}
               className="btn btn-ghost btn-sm"
@@ -203,8 +251,17 @@ export default function TrackOrder() {
               <RefreshCw className="h-4 w-4" /> Refresh Status
             </button>
             <button onClick={() => window.print()} className="btn btn-primary btn-sm">
-              <Printer className="h-4 w-4" /> Cetak Struk
+              <Printer className="h-4 w-4" /> [ 🖨️ CETAK STRUK THERMAL ]
             </button>
+            <a
+              href={waUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="btn btn-accent btn-sm"
+              data-testid="wa-share-receipt"
+            >
+              <MessageCircle className="h-4 w-4" /> [ 💬 KIRIM STRUK KE WHATSAPP ]
+            </a>
             <Link to="/" className="btn btn-ghost btn-sm">
               Pesan Lagi
             </Link>

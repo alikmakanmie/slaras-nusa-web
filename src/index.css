@@ -51,6 +51,39 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Struk thermal (58mm/80mm) — saat print, hanya area struk yang tercetak,
+   lebar 58mm, hitam-putih bersih tanpa shadow/border tebal. */
+@media print {
+  body {
+    background: #fff !important;
+  }
+  body * {
+    visibility: hidden;
+  }
+  .print-area,
+  .print-area * {
+    visibility: visible;
+  }
+  .print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 58mm;
+    max-width: 58mm;
+    margin: 0;
+    padding: 0;
+    border: none !important;
+    box-shadow: none !important;
+    background: #fff !important;
+    color: #000 !important;
+    font-size: 11px;
+  }
+  .print-area .thermal-qr svg {
+    width: 96px;
+    height: 96px;
+  }
+}
+
 @layer components {
   /* Tombol neobrutalis: border hitam tebal + hard shadow, tertekan saat klik.
      (Tailwind v4: @apply tidak bisa merujuk class komponen lain, jadi tiap
